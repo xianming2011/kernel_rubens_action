@@ -30,16 +30,26 @@ jobs:
       id: cache-apt
       uses: actions/cache@v3
       with:
-        path: /var/cache/apt
-        key: ${{ runner.os }}-apt-${{ hashFiles('**/rubens.yml') }}
+        path: |
+          /var/cache/apt
+          /var/lib/apt/lists
+          /usr/local/lib/
+          /usr/lib/
+          /usr/include/
+        key: ${{ runner.os }}-apt-env-${{ hashFiles('**/rubens.yml') }}
         restore-keys: |
-          ${{ runner.os }}-apt-
+          ${{ runner.os }}-apt-env-
         enableCrossOsArchive: true
 
     - name: 构建编译内核环境
+      if: steps.cache-apt.outputs.cache-hit != 'true'
       run: |
         sudo apt-get update
         sudo -E apt-get -y -qq install git make bc bison ccache openssl zip kmod cpio flex libelf-dev curl libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+
+    - name: 创建工作目录
+      run: |
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: 缓存Clang编译器
@@ -93,11 +103,13 @@ jobs:
         
         make -j$(nproc --all) O=out ARCH=arm64 rubens_defconfig
         
-        make -j$(nproc --all) CC="ccache clang" CXX=clang++ O=out ARCH=arm64 \
+        make -j$(nproc --all) CC="ccache clang -w" CXX="clang++ -w" O=out ARCH=arm64 \
           CLANG_TRIPLE="aarch64-linux-gnu-" \
           CROSS_COMPILE="aarch64-linux-gnu-" \
           CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
-          LLVM=1 LLVM_IAS=1
+          LLVM=1 LLVM_IAS=1 \
+          KBUILD_CFLAGS="-w" \
+          KBUILD_CPPFLAGS="-w"
                 
     - name: 准备打包内核
       run: |       
@@ -107,6 +119,15 @@ jobs:
         sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
         sed -i 's/is_slot_device=1;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh        
         cp android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE_NAME }} AnyKernel3/
+        
+        # 复制额外的内核镜像文件
+        if [ -f android-kernel/out/arch/arm64/boot/Image ]; then
+            cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
+        fi
+        if [ -f android-kernel/out/arch/arm64/boot/Image.gz ]; then
+            cp android-kernel/out/arch/arm64/boot/Image.gz AnyKernel3/
+        fi
+        
         if [ ${{ env.NEED_DTBO }} = true ]; then
             echo "NEED=true" >> $GITHUB_ENV
             if [ -f android-kernel/out/arch/arm64/boot/dtbo.img ]; then
