@@ -113,25 +113,25 @@ jobs:
         export CC=clang
         export HOSTCC=clang
         export HOSTCXX=clang++
-        export HOSTCFLAGS="-w"
-        export HOSTCXXFLAGS="-w"
+        export HOSTCFLAGS="-w -I/usr/include"
+        export HOSTCXXFLAGS="-w -I/usr/include"
         
         # 添加清理步骤
         make ARCH=arm64 mrproper
         
         make -j$(nproc --all) O=out ARCH=arm64 rubens_defconfig
         
-        make -j$(nproc --all) CC="ccache clang -w" CXX="clang++ -w" O=out ARCH=arm64 \
+        make -j$(nproc --all) CC="ccache clang -w -I/usr/include" CXX="clang++ -w -I/usr/include" O=out ARCH=arm64 \
           CLANG_TRIPLE="aarch64-linux-gnu-" \
           CROSS_COMPILE="aarch64-linux-gnu-" \
           CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
           LLVM=1 LLVM_IAS=1 \
-          KBUILD_CFLAGS="-w" \
-          KBUILD_CPPFLAGS="-w" \
+          KBUILD_CFLAGS="-w -I/usr/include" \
+          KBUILD_CPPFLAGS="-w -I/usr/include" \
           HOSTCC=clang \
           HOSTCXX=clang++ \
-          HOSTCFLAGS="-w" \
-          HOSTCXXFLAGS="-w"
+          HOSTCFLAGS="-w -I/usr/include" \
+          HOSTCXXFLAGS="-w -I/usr/include"
                 
     - name: 准备打包内核
       run: |       
