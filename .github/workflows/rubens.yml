@@ -36,9 +36,8 @@ jobs:
           /usr/local/lib/
           /usr/lib/
           /usr/include/
-        key: ${{ runner.os }}-apt-env-${{ hashFiles('config.env') }}-${{ github.run_id }}
+        key: ${{ runner.os }}-apt-env-kernel-build
         restore-keys: |
-          ${{ runner.os }}-apt-env-${{ hashFiles('config.env') }}-
           ${{ runner.os }}-apt-env-
         enableCrossOsArchive: true
 
@@ -47,7 +46,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo -E apt-get -y -qq install git make bc bison ccache openssl zip kmod cpio flex libelf-dev curl libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: 创建工作目录
       run: |
@@ -60,7 +58,7 @@ jobs:
         path: |
           ${{ github.workspace }}/kernel_workspace/clang-aosp
           ~/.ccache
-        key: ${{ runner.os }}-clang-aosp-${{ hashFiles('config.env') }}
+        key: ${{ runner.os }}-clang-aosp-android12-release
         restore-keys: |
           ${{ runner.os }}-clang-aosp-
         enableCrossOsArchive: true
