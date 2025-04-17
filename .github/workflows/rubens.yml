@@ -45,7 +45,7 @@ jobs:
       if: steps.cache-apt.outputs.cache-hit != 'true'
       run: |
         sudo apt-get update
-        sudo -E apt-get -y -qq install git make bc bison ccache openssl zip kmod cpio flex libelf-dev curl libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+        sudo -E apt-get -y -qq install git make bc bison ccache openssl zip kmod cpio flex libelf-dev curl libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi g++-aarch64-linux-gnu g++-arm-linux-gnueabi
 
     - name: 创建工作目录
       run: |
@@ -113,6 +113,8 @@ jobs:
         export CC=clang
         export HOSTCC=clang
         export HOSTCXX=clang++
+        export HOSTCFLAGS="-w"
+        export HOSTCXXFLAGS="-w"
         
         # 添加清理步骤
         make ARCH=arm64 mrproper
@@ -125,7 +127,11 @@ jobs:
           CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
           LLVM=1 LLVM_IAS=1 \
           KBUILD_CFLAGS="-w" \
-          KBUILD_CPPFLAGS="-w"
+          KBUILD_CPPFLAGS="-w" \
+          HOSTCC=clang \
+          HOSTCXX=clang++ \
+          HOSTCFLAGS="-w" \
+          HOSTCXXFLAGS="-w"
                 
     - name: 准备打包内核
       run: |       
