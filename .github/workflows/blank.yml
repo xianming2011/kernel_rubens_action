@@ -1,0 +1,169 @@
+name: K50（rubens）高端机 谷歌clang12.0.5
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 
+    runs-on: ubuntu-latest
+    if: github.event.repository.owner.id == github.event.sender.id
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 环境变量配置
+      run: |
+        cat config.env | grep KERNEL_SOURCE= >> $GITHUB_ENV
+        cat config.env | grep KERNEL_SOURCE_BRANCH= >> $GITHUB_ENV
+        cat config.env | grep KERNEL_CONFIG= >> $GITHUB_ENV
+        cat config.env | grep KERNEL_ZIP_NAME= >> $GITHUB_ENV
+        cat config.env | grep LLVM_CONFIG= >> $GITHUB_ENV
+        cat config.env | grep KERNEL_IMAGE_NAME= >> $GITHUB_ENV
+        cat config.env | grep NEED_DTBO= >> $GITHUB_ENV
+        cat config.env | grep SWITCH_PYTHON= >> $GITHUB_ENV
+        cat config.env | grep ENABLE_KVM= >> $GITHUB_ENV
+        cat config.env | grep ENABLE_LXC_DOCKER= >> $GITHUB_ENV
+        cat config.env | grep ENABLE_KERNELSU= >> $GITHUB_ENV
+        cat config.env | grep KERNELSU_TAG= >> $GITHUB_ENV
+
+    - name: 缓存编译环境依赖
+      id: cache-apt
+      uses: actions/cache@v3
+      with:
+        path: |
+          /var/cache/apt
+          /var/lib/apt/lists
+          /usr/local/lib/
+          /usr/lib/
+          /usr/include/
+        key: ${{ runner.os }}-apt-env-kernel-build
+        restore-keys: |
+          ${{ runner.os }}-apt-env-
+        enableCrossOsArchive: true
+
+    - name: 构建编译内核环境
+      if: steps.cache-apt.outputs.cache-hit != 'true'
+      run: |
+        sudo apt-get update
+        sudo -E apt-get -y -qq install git make bc bison ccache openssl zip kmod cpio flex libelf-dev curl libssl-dev libtfm-dev wget device-tree-compiler ca-certificates python3 binutils binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi g++-aarch64-linux-gnu g++-arm-linux-gnueabi
+
+    - name: 创建工作目录
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+
+    - name: 缓存Clang编译器
+      id: cache-clang
+      uses: actions/cache@v3
+      with:
+        path: |
+          ${{ github.workspace }}/kernel_workspace/clang-aosp
+          ~/.ccache
+        key: ${{ runner.os }}-clang-aosp-android12-release
+        restore-keys: |
+          ${{ runner.os }}-clang-aosp-
+        enableCrossOsArchive: true
+
+    - name: 下载Clang-aosp编译器
+      if: steps.cache-clang.outputs.cache-hit != 'true'
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        mkdir -p clang-aosp
+        git clone -q --depth=1 --single-branch https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android12-release clang-aosp
+
+    - name: 配置 ccache
+      run: |
+        mkdir -p ~/.ccache
+        echo "max_size = 10G" > ~/.ccache/ccache.conf
+        echo "hash_dir = false" >> ~/.ccache/ccache.conf
+        echo "compiler_check = content" >> ~/.ccache/ccache.conf
+        echo "cache_dir = $HOME/.ccache" >> ~/.ccache/ccache.conf
+
+    - name: 下载内核源码
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} android-kernel --depth=1
+
+    - name: 生成完整配置
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        make ARCH=arm64 gki_defconfig
+        ./scripts/kconfig/merge_config.sh -m .config arch/arm64/configs/vendor/xiaomi_mt6895.config
+        ./scripts/kconfig/merge_config.sh -m .config arch/arm64/configs/vendor/rubens.config
+        make ARCH=arm64 olddefconfig
+        cp .config arch/arm64/configs/rubens_defconfig
+
+    - name: 设置ccache缓存
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: build-kernel-mido-kernel
+        max-size: 2G
+
+    - name: 开始编译内核
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        export PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/clang-r416183b/bin:$PATH
+        export KBUILD_BUILD_HOST=17
+        export KBUILD_BUILD_USER=HyperPower
+        
+        # 设置正确的工具链
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+        export ARCH=arm64
+        export CC=clang
+        export HOSTCC=clang
+        export HOSTCXX=clang++
+        
+        # 添加清理步骤
+        make ARCH=arm64 mrproper
+        
+        make -j$(nproc --all) O=out ARCH=arm64 rubens_defconfig
+        
+        make -j$(nproc --all) CC="ccache clang -w" CXX="clang++ -w" O=out ARCH=arm64 \
+          CLANG_TRIPLE="aarch64-linux-gnu-" \
+          CROSS_COMPILE="aarch64-linux-gnu-" \
+          CROSS_COMPILE_ARM32="arm-linux-gnueabi-" \
+          LLVM=1 LLVM_IAS=1
+                
+    - 名字: 准备打包内核
+跑: |       
+cd $GITHUB_WORKSPACE/kernel_workspace
+git clone https://github.com/osm0sis/AnyKernel3
+我-我-我's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+rm -rf AnyKernel3/.git* AnyKernel3/README.md's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
+cp android-kernel/out/arch/arm64/boot/dtbo.img AnyKernel3/'s/is_slot_device=1;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+菲
+        
+rm -rf AnyKernel3/.git* AnyKernel3/README.md[rm-rf AnyKernel3/嵌盘AnyKernel3/模块AnyKernel3/补丁{{env.NEED_DTBO}}=true]# 创建内核镜像目录
+mkdir -p kernel_images"NEED=true"# 复制内核镜像文件
+如果[-f android-kernel/out/arch/arm64/boot/Image]我-我-我[-fandroid-kernel/out/arch/arm64/boot/dtbo.img]我-我-我
+# 复制内核镜像文件跑
+cp android-kernel/out/arch/arm64/boot/Image. gz kernel_images/准备打包内核
+菲跑
+名字 cd$GITHUB_WORKSPACE/kernel_WORKSPACE[上传内核刷机包 git clone https://github.com/osm0sis/AnyKernel3{{env.DTBO_EXIST}}=true]用途；我喜欢's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+与 sed-i's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
+名字 sed-i's/is_slot_device=1;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+$cp android-kernel/out/arch/arm64/boot/${{ env.KERNEL_IMAGE_NAME }} AnyKernel3/
+路径如果菲$$rm -rf AnyKernel3/.git* AnyKernel3/README.md${env.NEED_DTBO}}=true]；那么rm-rf AnyKernel3/嵌盘 AnyKernel3/
+        
+如果 cp android-kernel/out/arch/arm64/boot/$
+；那么如果[-fandroid-kernel/out/arch/arm64/boot/dtbo.img]用途；用途；you androyodo-you/out/arch/arm64/boot/Image
+# 复制内核镜像文件菲rm-rf AnyKernel3/. git*AnyKernel3/README.md如果
+如果菲 rf AnyKernel3/you AnyKernel3/；>$GITHUB_ENV{{env.KERNEL_IMAGE_NAME}}AnyKernel3/{env.DTBO_EXIST}}=true]；那么我-我-我与；那么用途；使用；用法$名字回声
+cp android-kernel/out/arch/arm64/boot/Image kernel_images/
+菲
+如果[-fandroid-kernel/out/arch/arm64/boot/Image.gz]；那么
+cp android-kernel/out/arch/arm64/boot/Image.gz kernel_images/
+菲
+       
+    - 名字: 上传内核刷机包
+用途；使用；用法: actions/upload-artifact@v4
+与:
+名字: ${{ env.KERNEL_ZIP_NAME }}
+路径: kernel_workspace/AnyKernel3/*
+        
+    - 名字: 上传内核镜像文件
+用途；使用；用法: actions/upload-artifact@v4
+与:
+名字: kernel_images
+路径: kernel_workspace/kernel_images/*
